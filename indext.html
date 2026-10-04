@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-stone-950" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Umami Forge — Smash & Fire Lab | POS & KDS</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' },
+            fire: { 500: '#ef4444', 600: '#dc2626' }
+          },
+          fontFamily: {
+            title: ['Space Grotesk', 'sans-serif'],
+            sans: ['Inter', 'sans-serif'],
+            mono: ['Courier Prime', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* ==========================================================================
+       CORRECCIÓN DEFINITIVA DE ESCRITURA EN CLIENTE, MESA Y CAMPOS DE TEXTO
+       ========================================================================== */
+    input, select, textarea,
+    #customer-name,
+    #table-or-address,
+    #cash-given,
+    #custom-tip-input {
+      direction: ltr !important;
+      text-align: left !important;
+      unicode-bidi: normal !important;
+      writing-mode: horizontal-tb !important;
+    }
+
+    /* Estilos para impresión de ticket térmico en 80mm */
+    @media print {
+      body * { visibility: hidden; }
+      #thermal-ticket-modal, #thermal-ticket-modal * { visibility: visible; }
+      #thermal-ticket-modal {
+        position: absolute; left: 0; top: 0; width: 80mm; padding: 0; margin: 0; background: #fff !important; color: #000 !important;
+      }
+      .no-print { display: none !important; }
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #0c0a09; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #332e2b; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #f59e0b; }
+  </style>
+</head>
+
+<body class="h-[100dvh] text-stone-200 font-sans antialiased flex flex-col overflow-hidden selection:bg-amber-500 selection:text-black">
+
+  <!-- TOAST NOTIFICACIÓN FLOTANTE -->
+  <div id="toast-notification" class="fixed top-14 right-4 z-50 bg-emerald-600 text-white font-title font-bold px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 transform transition-all duration-300 -translate-y-20 opacity-0 pointer-events-none">
+    <i class="fa-solid fa-circle-check text-lg"></i>
+    <span id="toast-msg">¡Comanda enviada con éxito!</span>
+  </div>
+
+  <!-- HEADER Y NAVEGACIÓN PRINCIPAL -->
+  <header class="bg-stone-900 border-b border-stone-800 sticky top-0 z-40 shrink-0">
+    <div class="max-w-7xl mx-auto px-4 py-2.5 flex justify-between items-center gap-2">
+      <!-- Marca -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center text-black font-title font-bold text-lg shadow-md">
+          🔥
+        </div>
+        <div>
+          <h1 class="font-title font-bold text-base tracking-tight text-white flex items-center gap-1 leading-none">
+            UMAMI FORGE
+            <span class="text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">Lab</span>
+          </h1>
+          <p class="text-[10px] text-stone-400 italic">Smash & Fire Lab</p>
+        </div>
+      </div>
+
+      <!-- Selector para Escritorio (Caja vs Cocina) -->
+      <div class="hidden md:flex items-center gap-2 bg-stone-950 p-1 rounded-xl border border-stone-800">
+        <button id="btn-mode-pos" onclick="switchView('pos')" class="px-3 py-1.5 rounded-lg font-title font-semibold text-xs bg-amber-500 text-stone-950 shadow">
+          <i class="fa-solid fa-cash-register"></i> Caja (POS)
+        </button>
+        <button id="btn-mode-kds" onclick="switchView('kds')" class="px-3 py-1.5 rounded-lg font-title font-semibold text-xs text-stone-400 hover:text-white">
+          <i class="fa-solid fa-fire-burner"></i> Cocina (KDS)
+          <span id="kds-pending-badge" class="ml-1 px-1.5 py-0.2 text-[10px] bg-red-600 text-white rounded-full hidden">0</span>
+        </button>
+      </div>
+
+      <!-- Selector Táctil para Celulares -->
+      <div class="flex md:hidden items-center gap-1 bg-stone-950 p-1 rounded-xl border border-stone-800 text-xs">
+        <button id="mob-tab-menu" onclick="switchMobileTab('menu')" class="px-2.5 py-1 rounded-lg font-semibold bg-amber-500 text-black">
+          🍔 Menú
+        </button>
+        <button id="mob-tab-cart" onclick="switchMobileTab('cart')" class="px-2.5 py-1 rounded-lg font-semibold text-stone-400">
+          🛒 Orden <span id="mob-cart-badge" class="bg-amber-500 text-black px-1.5 py-0.2 rounded-full text-[10px] font-bold ml-0.5 hidden">0</span>
+        </button>
+        <button id="mob-tab-kds" onclick="switchMobileTab('kds')" class="px-2.5 py-1 rounded-lg font-semibold text-stone-400">
+          🔥 Cocina
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTENEDOR PRINCIPAL -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 md:p-4 overflow-hidden flex flex-col">
+
+    <!-- VISTA 1: PUNTO DE VENTA / CAJA -->
+    <div id="view-pos" class="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full overflow-hidden">
+
+      <!-- COLUMNA IZQUIERDA: CATÁLOGO DE MENÚ (7 COLS) -->
+      <div id="col-menu" class="lg:col-span-7 xl:col-span-8 flex flex-col gap-3 h-full overflow-hidden">
+        <!-- Categorías -->
+        <div class="flex items-center gap-2 overflow-x-auto pb-1 shrink-0 custom-scrollbar">
+          <button onclick="filterCategory('all', this)" class="cat-btn active px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-amber-500 text-black shadow shrink-0">Todos</button>
+          <button onclick="filterCategory('burgers', this)" class="cat-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-stone-900 text-stone-300 hover:bg-stone-800 border border-stone-800 shrink-0">🍔 Hamburguesas</button>
+          <button onclick="filterCategory('sides', this)" class="cat-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-stone-900 text-stone-300 hover:bg-stone-800 border border-stone-800 shrink-0">🍟 Papas y Complementos</button>
+          <button onclick="filterCategory('drinks', this)" class="cat-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-stone-900 text-stone-300 hover:bg-stone-800 border border-stone-800 shrink-0">🥤 Bebidas</button>
+          <button onclick="filterCategory('desserts', this)" class="cat-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-stone-900 text-stone-300 hover:bg-stone-800 border border-stone-800 shrink-0">🍦 Postres</button>
+        </div>
+
+        <!-- Catálogo de Productos -->
+        <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 overflow-y-auto pr-1 custom-scrollbar pb-20 lg:pb-0">
+          <!-- Cargas dinámicas JS -->
+        </div>
+      </div>
+
+      <!-- COLUMNA DERECHA: CARRITO Y CHECKOUT (5 COLS) -->
+      <div id="col-cart" class="hidden lg:flex lg:col-span-5 xl:col-span-4 bg-stone-900 border border-stone-800 rounded-2xl p-3.5 flex-col h-full overflow-hidden shadow-2xl">
+        
+        <div class="flex justify-between items-center pb-2 border-b border-stone-800 shrink-0">
+          <h2 class="font-title font-bold text-sm text-white flex items-center gap-2">
+            <i class="fa-solid fa-receipt text-amber-500"></i> Resumen de la Orden
+          </h2>
+          <button onclick="clearCart()" class="text-[11px] text-stone-400 hover:text-red-400 transition-colors">
+            <i class="fa-solid fa-trash-can"></i> Vaciar
+          </button>
+        </div>
+
+        <!-- ZONA DE CONFIGURACIÓN Y LISTA DE PRODUCTOS -->
+        <div class="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-3 my-2">
+
+          <!-- 1. Datos del Cliente y Servicio -->
+          <div class="bg-stone-950 p-2.5 rounded-xl border border-stone-800 space-y-2">
+            <label class="text-[10px] font-semibold text-amber-400 uppercase tracking-wider block">1. Servicio y Cliente</label>
+            <div class="grid grid-cols-3 gap-1">
+              <button id="btn-service-dinein" onclick="setOrderType('dinein')" class="service-btn active p-1.5 rounded-lg border border-stone-800 bg-amber-500 text-black font-semibold text-[11px] flex items-center justify-center gap-1">
+                🍽️ Aquí
+              </button>
+              <button id="btn-service-takeout" onclick="setOrderType('takeout')" class="service-btn p-1.5 rounded-lg border border-stone-800 bg-stone-900 text-stone-300 font-semibold text-[11px] flex items-center justify-center gap-1">
+                🛍 Llevar
+              </button>
+              <button id="btn-service-delivery" onclick="setOrderType('delivery')" class="service-btn p-1.5 rounded-lg border border-stone-800 bg-stone-900 text-stone-300 font-semibold text-[11px] flex items-center justify-center gap-1">
+                🛵 Delivery
+              </button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <div>
+                <label class="text-[9px] font-semibold text-stone-400 uppercase block mb-0.5">Cliente</label>
+                <input type="text" id="customer-name" dir="ltr" placeholder="Ej. Diego" class="w-full bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1 text-xs text-white text-left focus:outline-none focus:border-amber-500">
+              </div>
+              <div>
+                <label id="lbl-table-or-address" class="text-[9px] font-semibold text-stone-400 uppercase block mb-0.5">Mesa #</label>
+                <input type="text" id="table-or-address" dir="ltr" placeholder="Ej. Mesa 4" class="w-full bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1 text-xs text-white text-left focus:outline-none focus:border-amber-500">
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Lista de Productos -->
+          <div>
+            <label class="text-[10px] font-semibold text-amber-400 uppercase tracking-wider block mb-1">2. Platillos Solicitados</label>
+            <div id="cart-items" class="space-y-1.5">
+              <!-- Carga dinámica JS -->
+            </div>
+          </div>
+
+          <!-- 3. Propina al Gusto y Pago -->
+          <div class="bg-stone-950 p-2.5 rounded-xl border border-stone-800 space-y-2">
+            <label class="text-[10px] font-semibold text-amber-400 uppercase tracking-wider block">3. Propina y Pago</label>
+            
+            <!-- Propina -->
+            <div>
+              <div class="flex justify-between items-center text-[10px] text-stone-400 mb-1">
+                <span>Propina seleccionada:</span>
+                <span id="tip-display-val" class="text-amber-400 font-mono font-bold">$0.00 MXN</span>
+              </div>
+              <div class="grid grid-cols-5 gap-1 mb-1.5">
+                <button onclick="setTipPercent(0, this)" class="tip-btn px-1 py-1 rounded bg-amber-500 text-black font-mono font-bold text-[10px]">0%</button>
+                <button onclick="setTipPercent(10, this)" class="tip-btn px-1 py-1 rounded bg-stone-900 text-stone-300 font-mono text-[10px]">10%</button>
+                <button onclick="setTipPercent(15, this)" class="tip-btn px-1 py-1 rounded bg-stone-900 text-stone-300 font-mono text-[10px]">15%</button>
+                <button onclick="setTipPercent(20, this)" class="tip-btn px-1 py-1 rounded bg-stone-900 text-stone-300 font-mono text-[10px]">20%</button>
+                <button onclick="enableCustomTip(this)" class="tip-btn px-1 py-1 rounded bg-stone-900 text-amber-400 font-mono text-[10px]">✏ Gusto</button>
+              </div>
+              <div id="custom-tip-box" class="hidden mt-1">
+                <input type="number" id="custom-tip-input" dir="ltr" placeholder="Ingresa propina en $ MXN" oninput="handleCustomTipInput()" class="w-full bg-stone-900 border border-amber-500/50 rounded px-2.5 py-1 text-xs font-mono text-white text-left focus:outline-none">
+              </div>
+            </div>
+
+            <!-- Pago -->
+            <div class="pt-1 border-t border-stone-800/80">
+              <label class="text-[9px] text-stone-400 uppercase block font-semibold mb-1">Método de Pago</label>
+              <div class="grid grid-cols-3 gap-1 mb-1.5">
+                <button id="btn-pay-cash" onclick="setPaymentMethod('cash')" class="pay-btn active px-1.5 py-1 rounded-lg border border-stone-800 bg-amber-500 text-black font-semibold text-[11px] flex items-center justify-center gap-1">
+                  💵 Efectivo
+                </button>
+                <button id="btn-pay-card" onclick="setPaymentMethod('card')" class="pay-btn px-1.5 py-1 rounded-lg border border-stone-800 bg-stone-900 text-stone-300 font-semibold text-[11px] flex items-center justify-center gap-1">
+                  💳 Tarjeta
+                </button>
+                <button id="btn-pay-transfer" onclick="setPaymentMethod('transfer')" class="pay-btn px-1.5 py-1 rounded-lg border border-stone-800 bg-stone-900 text-stone-300 font-semibold text-[11px] flex items-center justify-center gap-1">
+                  📲 Transf.
+                </button>
+              </div>
+
+              <div id="cash-calculator-box" class="grid grid-cols-2 gap-2 bg-stone-900 p-2 rounded-lg border border-stone-800">
+                <div>
+                  <label class="text-[9px] text-stone-400 uppercase block font-semibold mb-0.5">Paga con ($)</label>
+                  <input type="number" id="cash-given" dir="ltr" placeholder="0.00" oninput="calculateChange()" class="w-full bg-stone-950 border border-stone-800 rounded px-2.5 py-1 text-xs font-mono text-white text-left focus:outline-none focus:border-amber-500">
+                </div>
+                <div>
+                  <label class="text-[9px] text-stone-400 uppercase block font-semibold mb-0.5">Cambio</label>
+                  <div id="cash-change" class="w-full bg-stone-950 border border-stone-800 rounded px-2.5 py-1 text-xs font-mono text-emerald-400 font-bold">$0.00</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- PIE FIJO CON TOTALES Y BOTÓN DE ACCIÓN -->
+        <div class="pt-2 border-t border-stone-800 shrink-0 space-y-2 bg-stone-900 pb-2 md:pb-0">
+          <div class="space-y-0.5 text-xs">
+            <div class="flex justify-between text-stone-400">
+              <span>Subtotal:</span>
+              <span id="summary-subtotal" class="font-mono">$0.00 MXN</span>
+            </div>
+            <div class="flex justify-between text-stone-400">
+              <span>IVA (16% incl.):</span>
+              <span id="summary-tax" class="font-mono">$0.00 MXN</span>
+            </div>
+            <div class="flex justify-between font-title font-bold text-white text-base pt-1 border-t border-stone-800/60">
+              <span>TOTAL FINAL:</span>
+              <span id="summary-total" class="font-mono text-amber-400 text-lg">$0.00 MXN</span>
+            </div>
+          </div>
+
+          <button onclick="processOrderAndSend()" class="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-title font-bold py-3 rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 text-sm">
+            <i class="fa-solid fa-paper-plane"></i> ENVIAR COMANDA Y VER TICKET
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- VISTA 2: PANTALLA DE COCINA (KDS) -->
+    <div id="view-kds" class="hidden h-full flex flex-col gap-3 overflow-hidden">
+      <div class="flex justify-between items-center bg-stone-900 p-3 rounded-xl border border-stone-800 shadow shrink-0">
+        <div>
+          <h2 class="font-title font-bold text-base text-white flex items-center gap-2">
+            <i class="fa-solid fa-fire text-fire-500"></i> Receptor de Comandas en Cocina
+          </h2>
+          <p class="text-[11px] text-stone-400">Recepción dinámica en tiempo real</p>
+        </div>
+        <div class="hidden sm:flex items-center gap-3 text-xs font-mono">
+          <div class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Normal (&lt;5m)</div>
+          <div class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Urgente (5-10m)</div>
+          <div class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> Retrasado (&gt;10m)</div>
+        </div>
+      </div>
+
+      <!-- Grid de Comandas Activas -->
+      <div id="kds-orders-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto pr-1 custom-scrollbar flex-1">
+        <!-- Generación dinámica JS -->
+      </div>
+    </div>
+
+  </main>
+
+  <!-- BARRA FLOTANTE INFERIOR PARA MÓVIL -->
+  <div id="mobile-cart-bar" class="md:hidden fixed bottom-0 left-0 right-0 bg-stone-900 border-t border-stone-800 p-2.5 flex justify-between items-center z-30 shadow-2xl">
+    <div>
+      <span class="text-[10px] text-stone-400 block">Total orden</span>
+      <span id="mob-bar-total" class="font-mono font-bold text-amber-400 text-base">$0.00 MXN</span>
+    </div>
+    <button onclick="switchMobileTab('cart')" class="bg-amber-500 text-stone-950 font-title font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-lg">
+      <i class="fa-solid fa-cart-shopping"></i> Ver Orden (<span id="mob-bar-count">0</span>)
+    </button>
+  </div>
+
+  <!-- MODAL DE PERSONALIZACIÓN -->
+  <div id="custom-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 hidden">
+    <div class="bg-stone-900 border border-stone-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+      <div class="bg-stone-950 p-3.5 border-b border-stone-800 flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-2.5">
+          <span id="modal-product-icon" class="text-2xl">🍔</span>
+          <div>
+            <h3 id="modal-product-title" class="font-title font-bold text-white text-sm">Personalizar Platillo</h3>
+            <p id="modal-product-subtitle" class="text-[10px] text-stone-400">Especificaciones de cocina</p>
+          </div>
+        </div>
+        <button onclick="closeCustomModal()" class="text-stone-400 hover:text-white p-1 text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div id="modal-body-content" class="p-3.5 overflow-y-auto custom-scrollbar space-y-3 flex-1">
+        <!-- Inyección JS independiente por producto específico -->
+      </div>
+
+      <div class="p-3.5 bg-stone-950 border-t border-stone-800 flex justify-between items-center shrink-0">
+        <div>
+          <span class="text-[9px] text-stone-400 block uppercase font-semibold">Precio Unitario</span>
+          <span id="modal-total-price" class="font-title font-bold text-amber-400 text-base font-mono">$0.00 MXN</span>
+        </div>
+        <button onclick="confirmAddCustomizedItem()" class="bg-amber-500 hover:bg-amber-400 text-stone-950 font-title font-bold px-4 py-2 rounded-xl text-xs transition-all flex items-center gap-1.5">
+          <i class="fa-solid fa-cart-plus"></i> Agregar a la Orden
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DEL TICKET TÉRMICO DE COMPROBANTE -->
+  <div id="thermal-ticket-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 hidden">
+    <div class="bg-white text-black p-4 rounded-none w-full max-w-[80mm] font-mono text-xs shadow-2xl flex flex-col gap-2 border border-stone-300">
+      <div class="text-center space-y-0.5 border-b border-dashed border-black pb-2">
+        <h2 class="font-bold text-sm tracking-wider">UMAMI FORGE</h2>
+        <p class="text-[9px] uppercase font-bold">Smash & Fire Lab</p>
+        <p class="text-[8px]">Av. Industrial #402, Naucalpan, MEX</p>
+        <p class="text-[8px]">RFC: UMF-260904-LAB | Tel: (55) 8900-FIRE</p>
+      </div>
+
+      <div class="text-[9px] space-y-0.5 border-b border-dashed border-black pb-2">
+        <div class="flex justify-between"><span>FOLIO:</span><span id="ticket-id" class="font-bold">#0000</span></div>
+        <div class="flex justify-between"><span>FECHA:</span><span id="ticket-date">2026-10-04 12:00</span></div>
+        <div class="flex justify-between"><span>CLIENTE:</span><span id="ticket-customer">Diego</span></div>
+        <div class="flex justify-between"><span>SERVICIO:</span><span id="ticket-service" class="font-bold">Comer Aquí</span></div>
+        <div class="flex justify-between"><span>DETALLE:</span><span id="ticket-table">Mesa 1</span></div>
+        <div class="flex justify-between"><span>PAGO:</span><span id="ticket-payment" class="font-bold">EFECTIVO</span></div>
+      </div>
+
+      <!-- Detalle de Productos -->
+      <div id="ticket-items-list" class="space-y-1 border-b border-dashed border-black pb-2">
+        <!-- Items ticket JS -->
+      </div>
+
+      <!-- Desglose de Totales -->
+      <div class="space-y-0.5 text-[10px] border-b border-dashed border-black pb-2">
+        <div class="flex justify-between"><span>SUBTOTAL:</span><span id="ticket-subtotal">$0.00</span></div>
+        <div class="flex justify-between"><span>IVA (16%):</span><span id="ticket-tax">$0.00</span></div>
+        <div class="flex justify-between"><span>PROPINA:</span><span id="ticket-tip">$0.00</span></div>
+        <div class="flex justify-between font-bold text-xs pt-1"><span>TOTAL:</span><span id="ticket-total">$0.00</span></div>
+        <div id="ticket-cash-row" class="flex justify-between text-[9px]"><span>EFECTIVO RECIBIDO:</span><span id="ticket-cash">$0.00</span></div>
+        <div id="ticket-change-row" class="flex justify-between text-[9px]"><span>CAMBIO:</span><span id="ticket-change">$0.00</span></div>
+      </div>
+
+      <div class="text-center space-y-1 pt-1">
+        <p class="text-[9px] italic">"La alquimia del sabor hecha hamburguesa"</p>
+        <div class="flex justify-center my-1">
+          <div class="w-20 h-20 mx-auto border border-black p-0.5 flex items-center justify-center bg-white">
+            [ QR PROMO ]
+          </div>
+        </div>
+        <p class="text-[8px]">¡Gracias por tu compra en Umami Forge!</p>
+      </div>
+
+      <div class="no-print flex gap-2 pt-2">
+        <button onclick="window.print()" class="flex-1 bg-black text-white font-sans font-bold py-1.5 rounded text-xs hover:bg-stone-800">
+          <i class="fa-solid fa-print"></i> Imprimir
+        </button>
+        <button onclick="closeTicketModal()" class="px-3 bg-stone-200 text-black font-sans font-bold py-1.5 rounded text-xs hover:bg-stone-300">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LÓGICA JAVASCRIPT INTEGRADA -->
+  <script>
+    const MENU_PRODUCTS = [
+      { id: 'b1', name: 'The Master Smash', category: 'burgers', icon: '🍔', basePrice: 145, description: 'Doble carne smash 90g, doble cheddar americano, cebolla caramelizada y salsa especial Umami.' },
+      { id: 'b3', name: 'Classic BBQ Smoke', category: 'burgers', icon: '🥓', basePrice: 155, description: 'Carne smash 120g, queso cheddar, aros de cebolla empanizados, tocino ahumado y salsa BBQ artesanal.' },
+      { id: 'b4', name: 'Keto Smash Leaf', category: 'burgers', icon: '🥬', basePrice: 150, description: 'Sin pan. Doble carne smash envuelta en lechuga orejona fresca, jitomate, aguacate y queso gouda.' },
+
+      { id: 's1', name: 'Papas Callejeras Umami', category: 'sides', icon: '🍟', basePrice: 65, description: 'Corte recto crujiente con sazón ahumado de la casa, queso cheddar líquido y bits de tocino.' },
+      { id: 's2', name: 'Aros de Cebolla Crunch', category: 'sides', icon: '🧅', basePrice: 70, description: 'Aros de cebolla fritos al punto dorado servidos con dip de alioli de ajo rostizado.' },
+
+      { id: 'd1', name: 'Malteada Vainilla Ahumada', category: 'drinks', icon: '🥤', basePrice: 75, description: 'Helado artesanal de vainilla con toque de sal de mar, crema batida y galleta crumble.' },
+      { id: 'd2', name: 'Refresco de Lata 355ml', category: 'drinks', icon: '🥤', basePrice: 35, description: 'Coca-Cola, Sprite, Fanta, Mundet, Sidral o Fresca bien fría.' },
+      { id: 'd3', name: 'Cerveza Artesanal IPA', category: 'drinks', icon: '🍺', basePrice: 85, description: 'Lupulada y refrescante para maridar con hamburguesas especiadas (355ml).' },
+
+      { id: 'e1', name: 'Smash Cookie Skillet', category: 'desserts', icon: '🍪', basePrice: 80, description: 'Galleta de chispas de chocolate horneada al momento con bola de helado de vainilla.' },
+      { id: 'e2', name: 'Churro Bites Caramel', category: 'desserts', icon: '🥖', basePrice: 60, description: 'Bocaditos de churro crujientes espolvoreados con azúcar-canela y dipping de caramelo salado.' }
+    ];
+
+    let currentCart = [];
+    let currentTipMode = 'percent';
+    let currentTipValue = 0;
+    let currentOrderType = 'dinein';
+    let currentPaymentMethod = 'cash';
+    let selectedCategory = 'all';
+    let currentEditingProduct = null;
+    let broadcastChannel = null;
+    let lastSoundTime = 0;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      renderProducts();
+      setupSyncChannel();
+      renderCart();
+      renderKDS();
+    });
+
+    function playKitchenBellSound() {
+      const now = Date.now();
+      if (now - lastSoundTime < 1500) return;
+      lastSoundTime = now;
+
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
+        gain1.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start();
+        osc1.stop(ctx.currentTime + 0.3);
+
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.15);
+        gain2.gain.setValueAtTime(0.4, ctx.currentTime + 0.15);
+        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(ctx.currentTime + 0.15);
+        osc2.stop(ctx.currentTime + 0.5);
+      } catch (e) {
+        console.log("Audio disponible tras interacción", e);
+      }
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast-notification');
+      document.getElementById('toast-msg').innerText = message;
+      toast.classList.remove('-translate-y-20', 'opacity-0', 'pointer-events-none');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      
+      setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('-translate-y-20', 'opacity-0', 'pointer-events-none');
+      }, 3000);
+    }
+
+    function setupSyncChannel() {
+      if (window.BroadcastChannel) {
+        broadcastChannel = new BroadcastChannel('umamiforge_channel');
+        broadcastChannel.onmessage = (event) => {
+          if (event.data && (event.data.type === 'NEW_ORDER_SYNC' || event.data.type === 'STATUS_UPDATE_SYNC')) {
+            playKitchenBellSound();
+            renderKDS();
+          }
+        };
+      }
+      window.addEventListener('storage', () => renderKDS());
+    }
+
+    function notifyNewOrder() {
+      if (broadcastChannel) broadcastChannel.postMessage({ type: 'NEW_ORDER_SYNC' });
+    }
+
+    function notifyStatusUpdate() {
+      if (broadcastChannel) broadcastChannel.postMessage({ type: 'STATUS_UPDATE_SYNC' });
+    }
+
+    function switchView(view) {
+      const posView = document.getElementById('view-pos');
+      const kdsView = document.getElementById('view-kds');
+      const btnPos = document.getElementById('btn-mode-pos');
+      const btnKds = document.getElementById('btn-mode-kds');
+
+      if (view === 'pos') {
+        posView.classList.remove('hidden');
+        kdsView.classList.add('hidden');
+        btnPos.className = "px-3 py-1.5 rounded-lg font-title font-semibold text-xs bg-amber-500 text-stone-950 shadow";
+        btnKds.className = "px-3 py-1.5 rounded-lg font-title font-semibold text-xs text-stone-400 hover:text-white";
+      } else {
+        posView.classList.add('hidden');
+        kdsView.classList.remove('hidden');
+        btnKds.className = "px-3 py-1.5 rounded-lg font-title font-semibold text-xs bg-amber-500 text-stone-950 shadow";
+        btnPos.className = "px-3 py-1.5 rounded-lg font-title font-semibold text-xs text-stone-400 hover:text-white";
+        renderKDS();
+      }
+    }
+
+    function switchMobileTab(tab) {
+      const colMenu = document.getElementById('col-menu');
+      const colCart = document.getElementById('col-cart');
+      const viewKds = document.getElementById('view-kds');
+      const viewPos = document.getElementById('view-pos');
+      const mobBar = document.getElementById('mobile-cart-bar');
+
+      document.querySelectorAll('#mob-tab-menu, #mob-tab-cart, #mob-tab-kds').forEach(b => {
+        b.className = "px-2.5 py-1 rounded-lg font-semibold text-stone-400";
+      });
+
+      if (tab === 'menu') {
+        viewPos.classList.remove('hidden');
+        viewKds.classList.add('hidden');
+        colMenu.classList.remove('hidden');
+        colCart.classList.add('hidden');
+        mobBar.classList.remove('hidden');
+        document.getElementById('mob-tab-menu').className = "px-2.5 py-1 rounded-lg font-semibold bg-amber-500 text-black";
+      } else if (tab === 'cart') {
+        viewPos.classList.remove('hidden');
+        viewKds.classList.add('hidden');
+        colMenu.classList.add('hidden');
+        colCart.classList.remove('hidden');
+        colCart.classList.add('flex');
+        mobBar.classList.add('hidden');
+        document.getElementById('mob-tab-cart').className = "px-2.5 py-1 rounded-lg font-semibold bg-amber-500 text-black";
+      } else if (tab === 'kds') {
+        viewPos.classList.add('hidden');
+        viewKds.classList.remove('hidden');
+        mobBar.classList.add('hidden');
+        document.getElementById('mob-tab-kds').className = "px-2.5 py-1 rounded-lg font-semibold bg-amber-500 text-black";
+        renderKDS();
+      }
+    }
+
+    function renderProducts() {
+      const grid = document.getElementById('product-grid');
+      grid.innerHTML = '';
+      const filtered = selectedCategory === 'all' ? MENU_PRODUCTS : MENU_PRODUCTS.filter(p => p.category === selectedCategory);
+
+      filtered.forEach(product => {
+        const card = document.createElement('div');
+        card.className = "bg-stone-900 border border-stone-800 rounded-2xl p-3 flex flex-col justify-between hover:border-amber-500/50 transition-all shadow-lg group";
+        card.innerHTML = `
+          <div>
+            <div class="flex justify-between items-start mb-1.5">
+              <span class="text-2xl p-1.5 rounded-xl bg-stone-950 border border-stone-800">${product.icon}</span>
+              <span class="font-mono font-bold text-amber-400 text-sm">$${product.basePrice} MXN</span>
+            </div>
+            <h3 class="font-title font-bold text-white text-xs group-hover:text-amber-400 transition-colors">${product.name}</h3>
+            <p class="text-[10px] text-stone-400 mt-0.5 line-clamp-2">${product.description}</p>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5 mt-3">
+            <button onclick="quickAddProduct('${product.id}')" class="bg-stone-950 hover:bg-stone-800 text-stone-200 border border-stone-800 font-title font-semibold text-[11px] py-1.5 rounded-xl flex items-center justify-center gap-1">
+              <i class="fa-solid fa-plus text-amber-400"></i> Rápido
+            </button>
+            <button onclick="openCustomizationModal('${product.id}')" class="bg-amber-500 hover:bg-amber-400 text-stone-950 font-title font-semibold text-[11px] py-1.5 rounded-xl flex items-center justify-center gap-1">
+              <i class="fa-solid fa-sliders"></i> Modificar
+            </button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function filterCategory(cat, targetBtn = null) {
+      selectedCategory = cat;
+      document.querySelectorAll('.cat-btn').forEach(btn => {
+        btn.className = "cat-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-stone-900 text-stone-300 hover:bg-stone-800 border border-stone-800 shrink-0";
+      });
+      if (targetBtn) {
+        targetBtn.className = "cat-btn active px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-amber-500 text-black shadow shrink-0";
+      }
+      renderProducts();
+    }
+
+    function quickAddProduct(productId) {
+      const prod = MENU_PRODUCTS.find(p => p.id === productId);
+      if (!prod) return;
+      currentCart.push({
+        cartId: Date.now().toString() + Math.random().toString().slice(2, 5),
+        productId: prod.id,
+        name: prod.name,
+        category: prod.category,
+        icon: prod.icon,
+        unitPrice: Number(prod.basePrice),
+        quantity: 1,
+        customNotes: []
+      });
+      renderCart();
+    }
+
+    function setOrderType(type) {
+      currentOrderType = type;
+      document.querySelectorAll('.service-btn').forEach(b => {
+        b.className = "service-btn p-1.5 rounded-lg border border-stone-800 bg-stone-900 text-stone-300 font-semibold text-[11px] flex items-center justify-center gap-1";
+      });
+      const activeBtn = document.getElementById(`btn-service-${type}`);
+      if (activeBtn) activeBtn.className = "service-btn active p-1.5 rounded-lg border border-stone-800 bg-amber-500 text-black font-semibold text-[11px] flex items-center justify-center gap-1";
+
+      const lbl = document.getElementById('lbl-table-or-address');
+      const input = document.getElementById('table-or-address');
+      if (type === 'dinein') { lbl.innerText = "Mesa #"; input.placeholder = "Ej. Mesa 4"; }
+      else if (type === 'takeout') { lbl.innerText = "Folio / Referencia"; input.placeholder = "Ej. Mostrador"; }
+      else { lbl.innerText = "Dirección Delivery"; input.placeholder = "Ej. Av. Central #123"; }
+    }
+
+    function setPaymentMethod(method) {
+      currentPaymentMethod = method;
+      document.querySelectorAll('.pay-btn').forEach(b => {
+        b.className = "pay-btn px-1.5 py-1 rounded-lg border border-stone-800 bg-stone-900 text-stone-300 font-semibold text-[11px] flex items-center justify-center gap-1";
+      });
+      const activeBtn = document.getElementById(`btn-pay-${method}`);
+      if (activeBtn) activeBtn.className = "pay-btn active px-1.5 py-1 rounded-lg border border-stone-800 bg-amber-500 text-black font-semibold text-[11px] flex items-center justify-center gap-1";
+
+      const cashBox = document.getElementById('cash-calculator-box');
+      if (method === 'cash') {
+        cashBox.classList.remove('opacity-40', 'pointer-events-none');
+      } else {
+        cashBox.classList.add('opacity-40', 'pointer-events-none');
+        document.getElementById('cash-given').value = '';
+        document.getElementById('cash-change').innerText = "$0.00 (Exacto)";
+      }
+    }
+
+    function openCustomizationModal(productId) {
+      currentEditingProduct = MENU_PRODUCTS.find(p => p.id === productId);
+      if (!currentEditingProduct) return;
+
+      document.getElementById('modal-product-icon').innerText = currentEditingProduct.icon;
+      document.getElementById('modal-product-title').innerText = currentEditingProduct.name;
+      document.getElementById('modal-product-subtitle').innerText = `Categoría: ${currentEditingProduct.category.toUpperCase()}`;
+
+      const container = document.getElementById('modal-body-content');
+      container.innerHTML = '';
+
+      if (currentEditingProduct.category === 'burgers') {
+        let burgerSpecificRemovals = '';
+        let burgerSpecificExtras = '';
+
+        if (currentEditingProduct.id === 'b1') {
+          burgerSpecificRemovals = `
+            <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Doble Cheddar" class="accent-red-500"> Sin Cheddar</label>
+            <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Cebolla Caramelizada" class="accent-red-500"> Sin Cebolla Caramelizada</label>
+            <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Salsa Umami" class="accent-red-500"> Sin Salsa Umami</label>
+          `;
+          burgerSpecificExtras = `
+            <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Cheddar" data-price="15" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Cheddar</span></div><span class="text-emerald-400 font-mono">+$15</span></label>
+            <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Tocino Crocante" data-price="25" onchange="updateModalPrice()" class="accent-emerald-500"><span>Tocino Crocante</span></div><span class="text-emerald-400 font-mono">+$25</span></label>
+          `;
+
+          container.innerHTML = `
+            <div>
+              <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">1. Ensamble de Carnes Smash (90g)</label>
+              <div class="grid grid-cols-4 gap-1">
+                <label class="cursor-pointer"><input type="radio" name="opt-patty" value="1" onchange="updateModalPrice()" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs"><span class="block font-bold">1x</span></div></label>
+                <label class="cursor-pointer"><input type="radio" name="opt-patty" value="2" checked onchange="updateModalPrice()" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs"><span class="block font-bold">2x</span><span class="text-[9px] text-stone-400">Base</span></div></label>
+                <label class="cursor-pointer"><input type="radio" name="opt-patty" value="3" onchange="updateModalPrice()" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs"><span class="block font-bold">3x</span><span class="text-[9px] text-amber-400">+$35</span></div></label>
+                <label class="cursor-pointer"><input type="radio" name="opt-patty" value="4" onchange="updateModalPrice()" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs"><span class="block font-bold">4x</span><span class="text-[9px] text-amber-400">+$70</span></div></label>
+              </div>
+            </div>
+            <div>
+              <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">2. Estilo de Pan</label>
+              <select id="opt-bun" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-500">
+                <option value="Pan Brioche Artesanal">Pan Brioche Artesanal</option>
+                <option value="Envuelta en Lechuga (Keto)">Envuelta en Lechuga (Keto)</option>
+                <option value="Pan Dorado Crispy">Pan Dorado Crispy</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] font-title font-bold text-red-400 uppercase tracking-wider block mb-1">3. Condimentos Básicos (Quitar)</label>
+              <div class="grid grid-cols-2 gap-1 text-xs">
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Lechuga" class="accent-red-500"> Sin Lechuga</label>
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Jitomate" class="accent-red-500"> Sin Jitomate</label>
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Pepinillos" class="accent-red-500"> Sin Pepinillos</label>
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Cebolla" class="accent-red-500"> Sin Cebolla</label>
+                ${burgerSpecificRemovals}
+              </div>
+            </div>
+            <div>
+              <label class="text-[11px] font-title font-bold text-emerald-400 uppercase tracking-wider block mb-1">4. Apartado de Extras para Hamburguesa</label>
+              <div class="grid grid-cols-2 gap-1 text-xs">
+                <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Carne" data-price="35" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Carne (90g)</span></div><span class="text-emerald-400 font-mono">+$35</span></label>
+                <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Lechuga" data-price="10" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Lechuga</span></div><span class="text-emerald-400 font-mono">+$10</span></label>
+                <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Jitomate" data-price="10" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Jitomate</span></div><span class="text-emerald-400 font-mono">+$10</span></label>
+                <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Pepinillos" data-price="10" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Pepinillos</span></div><span class="text-emerald-400 font-mono">+$10</span></label>
+                <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Cebolla" data-price="10" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Cebolla</span></div><span class="text-emerald-400 font-mono">+$10</span></label>
+                ${burgerSpecificExtras}
+              </div>
+            </div>
+          `;
+
+        } else if (currentEditingProduct.id === 'b3') {
+          container.innerHTML = `
+            <div>
+              <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">1. Porción de Carne</label>
+              <div class="bg-stone-950 p-2 rounded-xl border border-stone-800 text-xs flex justify-between items-center">
+                <span>Carne Smash Base (120g)</span>
+                <span class="text-amber-400 font-mono font-bold">Incluida</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">2. Estilo de Pan</label>
+              <select id="opt-bun" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-500">
+                <option value="Pan Brioche Artesanal">Pan Brioche Artesanal</option>
+                <option value="Pan Dorado Crispy">Pan Dorado Crispy</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] font-title font-bold text-red-400 uppercase tracking-wider block mb-1">3. Condimentos Base (Lechuga y Pepinillos)</label>
+              <div class="grid grid-cols-2 gap-1 text-xs">
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Lechuga" class="accent-red-500"> Sin Lechuga</label>
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Pepinillos" class="accent-red-500"> Sin Pepinillos</label>
+              </div>
+            </div>
+            <div>
+              <label class="text-[11px] font-title font-bold text-red-400 uppercase tracking-wider block mb-1">4. Cebolla</label>
+              <div class="grid grid-cols-1 text-xs">
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Cebolla" class="accent-red-500"> Sin Cebolla</label>
+              </div>
+            </div>
+            <div>
+              <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">5. Ingredientes Principales (Quitar)</label>
+              <div class="grid grid-cols-2 gap-1 text-xs">
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Queso Cheddar" class="accent-red-500"> Sin Cheddar</label>
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Aros de Cebolla" class="accent-red-500"> Sin Aros de Cebolla</label>
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Tocino Ahumado" class="accent-red-500"> Sin Tocino Ahumado</label>
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Salsa BBQ Artesanal" class="accent-red-500"> Sin Salsa BBQ</label>
+              </div>
+            </div>
+            <div>
+              <label class="text-[11px] font-title font-bold text-emerald-400 uppercase tracking-wider block mb-1">6. Apartado de Extras para Classic BBQ Smoke</label>
+              <div class="grid grid-cols-2 gap-1 text-xs">
+                <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Doble Porción de Carne (120g extra)" data-price="45" onchange="updateModalPrice()" class="accent-emerald-500"><span>Doble Carne (120g)</span></div><span class="text-emerald-400 font-mono">+$45</span></label>
+                <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Tocino Ahumado" data-price="25" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Tocino</span></div><span class="text-emerald-400 font-mono">+$25</span></label>
+                <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Aros de Cebolla" data-price="20" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Aros Cebolla</span></div><span class="text-emerald-400 font-mono">+$20</span></label>
+                <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Salsa BBQ Artesanal" data-price="15" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Salsa BBQ</span></div><span class="text-emerald-400 font-mono">+$15</span></label>
+              </div>
+            </div>
+          `;
+
+        } else if (currentEditingProduct.id === 'b4') {
+          burgerSpecificRemovals = `
+            <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Aguacate" class="accent-red-500"> Sin Aguacate</label>
+            <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Queso Gouda" class="accent-red-500"> Sin Queso Gouda</label>
+          `;
+          burgerSpecificExtras = `
+            <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Aguacate" data-price="25" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Aguacate</span></div><span class="text-emerald-400 font-mono">+$25</span></label>
+            <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Queso Gouda" data-price="20" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Gouda</span></div><span class="text-emerald-400 font-mono">+$20</span></label>
+          `;
+
+          container.innerHTML = `
+            <div>
+              <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">1. Ensamble de Carnes Smash (90g)</label>
+              <div class="grid grid-cols-4 gap-1">
+                <label class="cursor-pointer"><input type="radio" name="opt-patty" value="1" onchange="updateModalPrice()" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs"><span class="block font-bold">1x</span></div></label>
+                <label class="cursor-pointer"><input type="radio" name="opt-patty" value="2" checked onchange="updateModalPrice()" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs"><span class="block font-bold">2x</span><span class="text-[9px] text-stone-400">Base</span></div></label>
+                <label class="cursor-pointer"><input type="radio" name="opt-patty" value="3" onchange="updateModalPrice()" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs"><span class="block font-bold">3x</span><span class="text-[9px] text-amber-400">+$35</span></div></label>
+                <label class="cursor-pointer"><input type="radio" name="opt-patty" value="4" onchange="updateModalPrice()" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs"><span class="block font-bold">4x</span><span class="text-[9px] text-amber-400">+$70</span></div></label>
+              </div>
+            </div>
+            <div>
+              <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">2. Estilo de Pan</label>
+              <select id="opt-bun" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-500">
+                <option value="Envuelta en Lechuga (Keto)">Envuelta en Lechuga (Keto)</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] font-title font-bold text-red-400 uppercase tracking-wider block mb-1">3. Condimentos Básicos (Quitar)</label>
+              <div class="grid grid-cols-2 gap-1 text-xs">
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Lechuga" class="accent-red-500"> Sin Lechuga</label>
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Jitomate" class="accent-red-500"> Sin Jitomate</label>
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Pepinillos" class="accent-red-500"> Sin Pepinillos</label>
+                <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Cebolla" class="accent-red-500"> Sin Cebolla</label>
+                ${burgerSpecificRemovals}
+              </div>
+            </div>
+            <div>
+              <label class="text-[11px] font-title font-bold text-emerald-400 uppercase tracking-wider block mb-1">4. Apartado de Extras para Hamburguesa</label>
+              <div class="grid grid-cols-2 gap-1 text-xs">
+                <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Carne" data-price="35" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Carne (90g)</span></div><span class="text-emerald-400 font-mono">+$35</span></label>
+                ${burgerSpecificExtras}
+              </div>
+            </div>
+          `;
+        }
+
+      } else if (currentEditingProduct.id === 's1') {
+        container.innerHTML = `
+          <div>
+            <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">1. Tamaño de Porción</label>
+            <div class="grid grid-cols-2 gap-1.5">
+              <label class="cursor-pointer"><input type="radio" name="opt-side-size" value="Porción Regular" data-price="0" checked onchange="updateModalPrice()" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs"><span class="block font-bold">Regular</span></div></label>
+              <label class="cursor-pointer"><input type="radio" name="opt-side-size" value="Porción XL Jumbo" data-price="25" onchange="updateModalPrice()" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs"><span class="block font-bold">XL Jumbo</span><span class="text-[9px] text-amber-400">+$25</span></div></label>
+            </div>
+          </div>
+          <div>
+            <label class="text-[11px] font-title font-bold text-red-400 uppercase tracking-wider block mb-1">2. Ingredientes de Papas</label>
+            <div class="grid grid-cols-2 gap-1 text-xs">
+              <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Cheddar Líquido" class="accent-red-500"> Sin Cheddar Líquido</label>
+              <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Bits de Tocino" class="accent-red-500"> Sin Bits de Tocino</label>
+            </div>
+          </div>
+          <div>
+            <label class="text-[11px] font-title font-bold text-emerald-400 uppercase tracking-wider block mb-1">3. Extras para Papas</label>
+            <div class="grid grid-cols-2 gap-1 text-xs">
+              <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Cheddar Líquido" data-price="20" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Cheddar Líquido</span></div><span class="text-emerald-400 font-mono">+$20</span></label>
+              <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Extra Bits de Tocino" data-price="15" onchange="updateModalPrice()" class="accent-emerald-500"><span>Extra Tocino</span></div><span class="text-emerald-400 font-mono">+$15</span></label>
+            </div>
+          </div>
+        `;
+      } else if (currentEditingProduct.id === 's2') {
+        container.innerHTML = `
+          <div>
+            <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">1. Tamaño de Aros</label>
+            <div class="grid grid-cols-2 gap-1.5">
+              <label class="cursor-pointer"><input type="radio" name="opt-side-size" value="Porción Regular" data-price="0" checked onchange="updateModalPrice()" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs"><span class="block font-bold">Regular</span></div></label>
+              <label class="cursor-pointer"><input type="radio" name="opt-side-size" value="Porción XL Jumbo" data-price="25" onchange="updateModalPrice()" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs"><span class="block font-bold">XL Jumbo</span><span class="text-[9px] text-amber-400">+$25</span></div></label>
+            </div>
+          </div>
+          <div>
+            <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">2. Aderezo Dip</label>
+            <select id="opt-sazon" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-500">
+              <option value="Dip de Alioli de Ajo Rostizado">Alioli de Ajo Rostizado (Base)</option>
+              <option value="Dip BBQ Artesanal">Dip BBQ Artesanal</option>
+              <option value="Sin Dip">Sin Dip</option>
+            </select>
+          </div>
+        `;
+      } else if (currentEditingProduct.id === 'd2') {
+        container.innerHTML = `
+          <div>
+            <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">1. Elige tu Refresco</label>
+            <select id="opt-drink-flavor" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-bold">
+              <option value="Coca-Cola Regular">Coca-Cola Regular</option>
+              <option value="Coca-Cola Sin Azúcar">Coca-Cola Sin Azúcar</option>
+              <option value="Sprite">Sprite</option>
+              <option value="Fanta Naranja">Fanta Naranja</option>
+              <option value="Manzanita Mundet">Manzanita Mundet</option>
+              <option value="Sidral Mundet">Sidral Mundet</option>
+              <option value="Fresca">Fresca</option>
+              <option value="Agua Mineral Peñafiel">Agua Mineral Peñafiel</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] font-title font-bold text-blue-400 uppercase tracking-wider block mb-1 mt-2">2. Hielo</label>
+            <div class="grid grid-cols-3 gap-1 text-xs">
+              <label class="cursor-pointer"><input type="radio" name="opt-ice" value="Hielo Normal" checked class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-blue-500 peer-checked:bg-blue-500/10 text-center">🧊 Normal</div></label>
+              <label class="cursor-pointer"><input type="radio" name="opt-ice" value="Poco Hielo" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-blue-500 peer-checked:bg-blue-500/10 text-center">💧 Poco</div></label>
+              <label class="cursor-pointer"><input type="radio" name="opt-ice" value="SIN HIELO" class="peer hidden"><div class="p-1.5 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-blue-500 peer-checked:bg-blue-500/10 text-center">🚫 Sin Hielo</div></label>
+            </div>
+          </div>
+        `;
+      } else if (currentEditingProduct.id === 'd3') {
+        container.innerHTML = `
+          <div>
+            <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">1. Estilo de Cerveza</label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="cursor-pointer"><input type="radio" name="opt-beer-type" value="Cerveza Clara (IPA)" checked class="peer hidden"><div class="p-2 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs font-bold">🍺 Cerveza Clara (IPA)</div></label>
+              <label class="cursor-pointer"><input type="radio" name="opt-beer-type" value="Cerveza Oscura (Stout)" class="peer hidden"><div class="p-2 border border-stone-800 rounded-xl bg-stone-950 peer-checked:border-amber-500 peer-checked:bg-amber-500/10 text-center text-xs font-bold">🍻 Cerveza Oscura (Stout)</div></label>
+            </div>
+          </div>
+        `;
+      } else if (currentEditingProduct.id === 'd1') {
+        container.innerHTML = `
+          <div>
+            <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">1. Toppings de Malteada</label>
+            <div class="grid grid-cols-2 gap-1 text-xs">
+              <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Crema Batida" class="accent-red-500"> Sin Crema Batida</label>
+              <label class="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-xl border border-stone-800"><input type="checkbox" name="opt-no" value="Sin Galleta Crumble" class="accent-red-500"> Sin Galleta Crumble</label>
+            </div>
+          </div>
+        `;
+      } else {
+        container.innerHTML = `
+          <div>
+            <label class="text-[11px] font-title font-bold text-amber-400 uppercase tracking-wider block mb-1">1. Extras de Postre</label>
+            <div class="grid grid-cols-2 gap-1 text-xs">
+              <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Bola Extra Helado" data-price="25" onchange="updateModalPrice()" class="accent-amber-500"><span>Bola Extra Helado</span></div><span class="text-amber-400 font-mono">+$25</span></label>
+              <label class="flex items-center justify-between bg-stone-950 p-1.5 rounded-xl border border-stone-800"><div class="flex items-center gap-1.5"><input type="checkbox" name="opt-extra" value="Dipping Extra Caramelo" data-price="15" onchange="updateModalPrice()" class="accent-amber-500"><span>Extra Caramelo</span></div><span class="text-amber-400 font-mono">+$15</span></label>
+            </div>
+          </div>
+        `;
+      }
+
+      updateModalPrice();
+      document.getElementById('custom-modal').classList.remove('hidden');
+    }
+
+    function calculateModalPrice() {
+      if (!currentEditingProduct) return 0;
+      let total = Number(currentEditingProduct.basePrice);
+      
+      const pattyOpt = document.querySelector('input[name="opt-patty"]:checked');
+      if (pattyOpt) {
+        const count = parseInt(pattyOpt.value);
+        if (count > 2) total += (count - 2) * 35;
+      }
+
+      const sideSize = document.querySelector('input[name="opt-side-size"]:checked');
+      if (sideSize) total += Number(sideSize.getAttribute('data-price') || 0);
+
+      document.querySelectorAll('input[name="opt-extra"]:checked').forEach(chk => {
+        total += Number(chk.getAttribute('data-price') || 0);
+      });
+
+      return total;
+    }
+
+    function updateModalPrice() {
+      document.getElementById('modal-total-price').innerText = `$${calculateModalPrice().toFixed(2)} MXN`;
+    }
+
+    function closeCustomModal() {
+      document.getElementById('custom-modal').classList.add('hidden');
+    }
+
+    function confirmAddCustomizedItem() {
+      if (!currentEditingProduct) return;
+      const itemPrice = calculateModalPrice();
+      let customNotes = [];
+
+      if (currentEditingProduct.category === 'burgers') {
+        if (currentEditingProduct.id === 'b3') {
+          customNotes.push('Carne Smash 120g');
+        } else {
+          const patty = document.querySelector('input[name="opt-patty"]:checked')?.value || '2';
+          if (patty !== '2') customNotes.push(`${patty} Carnes Smash`);
+        }
+        const bun = document.getElementById('opt-bun')?.value;
+        if (bun && bun !== 'Pan Brioche Artesanal') customNotes.push(bun);
+      } else if (currentEditingProduct.category === 'sides') {
+        const size = document.querySelector('input[name="opt-side-size"]:checked')?.value;
+        if (size && size !== 'Porción Regular') customNotes.push(size);
+        const sazon = document.getElementById('opt-sazon')?.value;
+        if (sazon) customNotes.push(sazon);
+      } else if (currentEditingProduct.category === 'drinks') {
+        if (currentEditingProduct.id === 'd2') {
+          const flavor = document.getElementById('opt-drink-flavor')?.value;
+          if (flavor) customNotes.push(`Sabor: ${flavor}`);
+        } else if (currentEditingProduct.id === 'd3') {
+          const beerType = document.querySelector('input[name="opt-beer-type"]:checked')?.value;
+          if (beerType) customNotes.push(beerType);
+        }
+        const ice = document.querySelector('input[name="opt-ice"]:checked')?.value;
+        if (ice && ice !== 'Hielo Normal') customNotes.push(ice);
+      }
+
+      document.querySelectorAll('input[name="opt-no"]:checked').forEach(chk => customNotes.push(`🚫 ${chk.value}`));
+      document.querySelectorAll('input[name="opt-extra"]:checked').forEach(chk => customNotes.push(`+${chk.value}`));
+
+      currentCart.push({
+        cartId: Date.now().toString() + Math.random().toString().slice(2, 5),
+        productId: currentEditingProduct.id,
+        name: currentEditingProduct.name,
+        category: currentEditingProduct.category,
+        icon: currentEditingProduct.icon,
+        unitPrice: Number(itemPrice),
+        quantity: 1,
+        customNotes: customNotes
+      });
+
+      renderCart();
+      closeCustomModal();
+    }
+
+    function renderCart() {
+      const container = document.getElementById('cart-items');
+      if (!container) return;
+
+      if (currentCart.length === 0) {
+        container.innerHTML = `
+          <div class="bg-stone-950/60 p-5 rounded-xl border border-stone-800/80 text-center text-stone-500">
+            <i class="fa-solid fa-basket-shopping text-2xl mb-1 opacity-30"></i>
+            <p class="text-xs">No hay platillos en la orden</p>
+          </div>
+        `;
+        updateCartTotals();
+        return;
+      }
+
+      let html = '';
+      currentCart.forEach(item => {
+        const lineTotal = Number(item.unitPrice) * Number(item.quantity);
+        html += `
+          <div class="bg-stone-950 p-2 rounded-xl border border-stone-800 flex justify-between items-start text-xs gap-2">
+            <div class="flex-1">
+              <div class="flex items-center gap-1 font-bold text-white">
+                <span>${item.icon}</span><span>${item.name}</span>
+              </div>
+              ${item.customNotes.length > 0 ? `
+                <div class="flex flex-wrap gap-1 mt-1">
+                  ${item.customNotes.map(n => `<span class="px-1.5 py-0.2 rounded text-[9px] ${n.startsWith('🚫') ? 'bg-red-950 text-red-300 border border-red-800' : 'bg-amber-950 text-amber-300 border border-amber-800'}">${n}</span>`).join('')}
+                </div>
+              ` : ''}
+              <div class="text-[11px] font-mono text-amber-400 mt-1">$${lineTotal.toFixed(2)} MXN</div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <div class="flex items-center border border-stone-800 rounded-lg bg-stone-900">
+                <button onclick="updateQty('${item.cartId}', -1)" class="px-1.5 py-0.5 text-stone-400 hover:text-white font-bold">-</button>
+                <span class="px-1 font-mono font-bold text-white text-xs">${item.quantity}</span>
+                <button onclick="updateQty('${item.cartId}', 1)" class="px-1.5 py-0.5 text-stone-400 hover:text-white font-bold">+</button>
+              </div>
+              <button onclick="removeItem('${item.cartId}')" class="text-stone-500 hover:text-red-400 p-1 text-xs">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+      updateCartTotals();
+    }
+
+    function updateQty(cartId, delta) {
+      const idx = currentCart.findIndex(i => i.cartId === cartId);
+      if (idx !== -1) {
+        currentCart[idx].quantity += delta;
+        if (currentCart[idx].quantity <= 0) currentCart.splice(idx, 1);
+      }
+      renderCart();
+    }
+
+    function removeItem(cartId) {
+      currentCart = currentCart.filter(i => i.cartId !== cartId);
+      renderCart();
+    }
+
+    function clearCart() {
+      currentCart = [];
+      document.getElementById('customer-name').value = '';
+      document.getElementById('table-or-address').value = '';
+      document.getElementById('cash-given').value = '';
+      document.getElementById('custom-tip-input').value = '';
+      setTipPercent(0);
+      setPaymentMethod('cash');
+      setOrderType('dinein');
+      renderCart();
+    }
+
+    function setTipPercent(percent, targetBtn = null) {
+      currentTipMode = 'percent';
+      currentTipValue = percent;
+      document.getElementById('custom-tip-box').classList.add('hidden');
+      document.querySelectorAll('.tip-btn').forEach(btn => btn.className = "tip-btn px-1 py-1 rounded bg-stone-900 text-stone-300 font-mono text-[10px]");
+      const activeBtn = targetBtn || document.querySelectorAll('.tip-btn')[0];
+      if (activeBtn) activeBtn.className = "tip-btn px-1 py-1 rounded bg-amber-500 text-black font-mono font-bold text-[10px]";
+      updateCartTotals();
+    }
+
+    function enableCustomTip(targetBtn = null) {
+      currentTipMode = 'custom';
+      document.getElementById('custom-tip-box').classList.remove('hidden');
+      document.querySelectorAll('.tip-btn').forEach(btn => btn.className = "tip-btn px-1 py-1 rounded bg-stone-900 text-stone-300 font-mono text-[10px]");
+      if (targetBtn) targetBtn.className = "tip-btn px-1 py-1 rounded bg-amber-500 text-black font-mono font-bold text-[10px]";
+      handleCustomTipInput();
+    }
+
+    function handleCustomTipInput() {
+      currentTipValue = Math.max(0, parseFloat(document.getElementById('custom-tip-input').value || 0));
+      updateCartTotals();
+    }
+
+    function calculateTotals() {
+      const subtotal = currentCart.reduce((sum, item) => sum + (Number(item.unitPrice) * Number(item.quantity)), 0);
+      const tax = subtotal * 0.16;
+      let tip = currentTipMode === 'percent' ? subtotal * (Number(currentTipValue) / 100) : Number(currentTipValue) || 0;
+      return { subtotal, tax, tip, total: subtotal + tip };
+    }
+
+    function updateCartTotals() {
+      const { subtotal, tax, tip, total } = calculateTotals();
+      document.getElementById('summary-subtotal').innerText = `$${subtotal.toFixed(2)} MXN`;
+      document.getElementById('summary-tax').innerText = `$${tax.toFixed(2)} MXN`;
+      document.getElementById('summary-total').innerText = `$${total.toFixed(2)} MXN`;
+      document.getElementById('tip-display-val').innerText = `$${tip.toFixed(2)} MXN`;
+
+      const totalCount = currentCart.reduce((acc, i) => acc + i.quantity, 0);
+      document.getElementById('mob-bar-total').innerText = `$${total.toFixed(2)} MXN`;
+      document.getElementById('mob-bar-count').innerText = totalCount;
+      const mobBadge = document.getElementById('mob-cart-badge');
+      if (mobBadge) {
+        mobBadge.innerText = totalCount;
+        mobBadge.classList.toggle('hidden', totalCount === 0);
+      }
+      calculateChange();
+    }
+
+    function calculateChange() {
+      const { total } = calculateTotals();
+      const changeEl = document.getElementById('cash-change');
+      if (currentPaymentMethod !== 'cash') {
+        changeEl.innerText = "$0.00 (Exacto)";
+        return;
+      }
+      const cashGiven = parseFloat(document.getElementById('cash-given').value || 0);
+      if (cashGiven >= total && total > 0) {
+        changeEl.innerText = `$${(cashGiven - total).toFixed(2)}`;
+        changeEl.className = "w-full bg-stone-950 border border-stone-800 rounded px-2.5 py-1 text-xs font-mono text-emerald-400 font-bold";
+      } else {
+        changeEl.innerText = "$0.00";
+        changeEl.className = "w-full bg-stone-950 border border-stone-800 rounded px-2.5 py-1 text-xs font-mono text-red-400 font-bold";
+      }
+    }
+
+    function processOrderAndSend() {
+      if (currentCart.length === 0) {
+        alert("⚠️ El carrito está vacío. Agrega al menos un platillo.");
+        return;
+      }
+
+      const customerName = document.getElementById('customer-name').value.trim() || 'Cliente';
+      const tableOrAddr = document.getElementById('table-or-address').value.trim() || (currentOrderType === 'dinein' ? 'Mesa 1' : 'Mostrador');
+      const { subtotal, tax, tip, total } = calculateTotals();
+      
+      let cashGiven = total;
+      let change = 0;
+      if (currentPaymentMethod === 'cash') {
+        cashGiven = parseFloat(document.getElementById('cash-given').value || total);
+        change = Math.max(0, cashGiven - total);
+      }
+
+      const isOnlyDrinks = currentCart.every(item => item.category === 'drinks');
+      let estimatedMinutes = 2;
+
+      if (!isOnlyDrinks) {
+        const existingOrders = JSON.parse(localStorage.getItem('umamiforge_orders') || '[]');
+        const nowMs = Date.now();
+        let pendingWorkMinutes = 0;
+
+        existingOrders.forEach(order => {
+          if (order.status === 'pending' || order.status === 'preparing') {
+            let orderTime = order.items.reduce((sum, item) => sum + ((item.category === 'burgers' ? 7 : 4) * item.quantity), 0);
+            if (order.status === 'preparing') {
+              orderTime = Math.max(1, orderTime - Math.floor((nowMs - order.timestampMs) / 60000));
+            }
+            pendingWorkMinutes += orderTime;
+          }
+        });
+
+        const currentPrepTime = currentCart.reduce((sum, item) => sum + ((item.category === 'burgers' ? 7 : (item.category === 'drinks' ? 1 : 4)) * item.quantity), 0);
+        estimatedMinutes = Math.min(60, 5 + pendingWorkMinutes + currentPrepTime);
+      }
+
+      const newOrder = {
+        id: 'UM-' + Math.floor(1000 + Math.random() * 9000),
+        customerName, orderType: currentOrderType, tableOrAddress: tableOrAddr,
+        paymentMethod: currentPaymentMethod, items: JSON.parse(JSON.stringify(currentCart)),
+        subtotal, tax, tip, total, cashGiven, change, status: 'pending',
+        createdAt: new Date().toISOString(), timestampMs: Date.now(), estimatedMinutes
+      };
+
+      let orders = JSON.parse(localStorage.getItem('umamiforge_orders') || '[]');
+      orders.unshift(newOrder);
+      localStorage.setItem('umamiforge_orders', JSON.stringify(orders));
+      notifyNewOrder();
+      playKitchenBellSound();
+      showToast(`🔥 ¡Comanda ${newOrder.id} enviada a Cocina!`);
+      openThermalTicket(newOrder);
+      clearCart();
+    }
+
+    function renderKDS() {
+      const grid = document.getElementById('kds-orders-grid');
+      const badge = document.getElementById('kds-pending-badge');
+      if (!grid) return;
+
+      grid.innerHTML = '';
+      const pendingOrders = JSON.parse(localStorage.getItem('umamiforge_orders') || '[]').filter(o => o.status !== 'delivered');
+
+      if (badge) {
+        badge.innerText = pendingOrders.length;
+        badge.classList.toggle('hidden', pendingOrders.length === 0);
+      }
+
+      if (pendingOrders.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full h-48 flex flex-col items-center justify-center text-stone-500 border border-dashed border-stone-800 rounded-2xl">
+            <i class="fa-solid fa-check-circle text-4xl mb-2 text-emerald-500/40"></i>
+            <p class="font-title text-sm text-stone-400">Cocina sin pedidos pendientes</p>
+          </div>
+        `;
+        return;
+      }
+
+      pendingOrders.forEach(order => {
+        const elapsedMinutes = Math.floor((Date.now() - order.timestampMs) / 60000);
+        let statusBg = "border-emerald-500/40 bg-stone-900";
+        let timerColor = "text-emerald-400";
+        if (elapsedMinutes >= 10) { statusBg = "border-red-500/60 bg-red-950/20"; timerColor = "text-red-400 animate-pulse"; }
+        else if (elapsedMinutes >= 5) { statusBg = "border-amber-500/50 bg-amber-950/20"; timerColor = "text-amber-400"; }
+
+        const card = document.createElement('div');
+        card.className = `border rounded-2xl p-3 flex flex-col justify-between shadow-xl transition-all ${statusBg}`;
+        card.innerHTML = `
+          <div>
+            <div class="flex justify-between items-start pb-2 border-b border-stone-800">
+              <div>
+                <span class="font-mono font-bold text-sm text-white">${order.id}</span>
+                <p class="text-xs font-semibold text-amber-400">${order.customerName}</p>
+                <div class="flex items-center gap-1 mt-1">
+                  <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-stone-800 text-stone-300 border border-stone-700">${order.orderType}: ${order.tableOrAddress}</span>
+                </div>
+              </div>
+              <div class="text-right">
+                <span class="font-mono text-xs font-bold ${timerColor}"><i class="fa-regular fa-clock"></i> ${elapsedMinutes}m</span>
+                <span class="block text-[9px] text-stone-500">Est. ${order.estimatedMinutes}m</span>
+              </div>
+            </div>
+            <div class="py-2 space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+              ${order.items.map(item => `
+                <div class="bg-stone-950 p-2 rounded-xl border border-stone-800 text-xs">
+                  <div class="flex justify-between items-center font-bold text-white">
+                    <span>${item.quantity}x${item.name}</span>
+                  </div>
+                  ${item.customNotes.length > 0 ? `<div class="flex flex-wrap gap-1 mt-1">${item.customNotes.map(n => `<span class="px-1.5 py-0.2 rounded text-[9px] ${n.startsWith('🚫') ? 'bg-red-950 text-red-300' : 'bg-emerald-950 text-emerald-300'}">${n}</span>`).join('')}</div>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          <div class="pt-2 border-t border-stone-800">
+            ${order.status === 'pending' ? `<button onclick="updateOrderStatus('${order.id}', 'preparing')" class="w-full bg-amber-500 hover:bg-amber-400 text-stone-950 font-title font-bold py-1.5 rounded-xl text-xs">Iniciar Preparación</button>` :
+              order.status === 'preparing' ? `<button onclick="updateOrderStatus('${order.id}', 'ready')" class="w-full bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-title font-bold py-1.5 rounded-xl text-xs">Marcar Listo</button>` :
+              `<button onclick="updateOrderStatus('${order.id}', 'delivered')" class="w-full bg-stone-800 hover:bg-stone-700 text-stone-200 font-title font-bold py-1.5 rounded-xl text-xs">Entregar y Archivar</button>`}
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function updateOrderStatus(orderId, newStatus) {
+      let orders = JSON.parse(localStorage.getItem('umamiforge_orders') || '[]');
+      const idx = orders.findIndex(o => o.id === orderId);
+      if (idx !== -1) {
+        orders[idx].status = newStatus;
+        localStorage.setItem('umamiforge_orders', JSON.stringify(orders));
+        notifyStatusUpdate();
+        renderKDS();
+      }
+    }
+
+    function openThermalTicket(order) {
+      document.getElementById('ticket-id').innerText = order.id;
+      document.getElementById('ticket-date').innerText = new Date(order.createdAt).toLocaleString('es-MX');
+      document.getElementById('ticket-customer').innerText = order.customerName;
+      document.getElementById('ticket-service').innerText = order.orderType === 'dinein' ? 'Comer Aquí' : order.orderType === 'takeout' ? 'Para Llevar' : 'Delivery';
+      document.getElementById('ticket-table').innerText = order.tableOrAddress;
+      document.getElementById('ticket-payment').innerText = order.paymentMethod === 'cash' ? 'EFECTIVO' : order.paymentMethod === 'card' ? 'TARJETA' : 'TRANSFERENCIA';
+
+      let ticketHeader = document.querySelector('#thermal-ticket-modal .text-\\[9px\\].space-y-0\\.5');
+      let estTimeRow = document.getElementById('ticket-estimated-time-row');
+      if (!estTimeRow && ticketHeader) {
+        estTimeRow = document.createElement('div');
+        estTimeRow.id = 'ticket-estimated-time-row';
+        estTimeRow.className = 'flex justify-between font-bold border-t border-dashed border-black pt-1 mt-1';
+        ticketHeader.appendChild(estTimeRow);
+      }
+      if (estTimeRow) {
+        estTimeRow.innerHTML = `<span>TIEMPO EST. ENTREGA:</span><span>${order.estimatedMinutes} MIN</span>`;
+      }
+
+      let qrContainer = document.querySelector('#thermal-ticket-modal .w-20.h-20');
+      if (qrContainer) {
+        const qrData = encodeURIComponent(`https://umamiforge.lab/order?id=${order.id}&total=${order.total}`);
+        qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${qrData}" alt="QR Comprobante" class="w-full h-full object-contain" />`;
+      }
+
+      const itemsContainer = document.getElementById('ticket-items-list');
+      itemsContainer.innerHTML = '';
+      order.items.forEach(item => {
+        itemsContainer.innerHTML += `
+          <div class="text-[9px]">
+            <div class="flex justify-between font-bold"><span>${item.quantity}x ${item.name}</span><span>$${(item.unitPrice * item.quantity).toFixed(2)}</span></div>
+            ${item.customNotes.length > 0 ? `<div class="text-[8px] text-stone-600 pl-2">${item.customNotes.join(', ')}</div>` : ''}
+          </div>
+        `;
+      });
+
+      document.getElementById('ticket-subtotal').innerText = `$${Number(order.subtotal).toFixed(2)}`;
+      document.getElementById('ticket-tax').innerText = `$${Number(order.tax).toFixed(2)}`;
+      document.getElementById('ticket-tip').innerText = `$${Number(order.tip).toFixed(2)}`;
+      document.getElementById('ticket-total').innerText = `$${Number(order.total).toFixed(2)}`;
+
+      const cashRow = document.getElementById('ticket-cash-row');
+      const changeRow = document.getElementById('ticket-change-row');
+      if (order.paymentMethod === 'cash') {
+        cashRow.style.display = 'flex';
+        changeRow.style.display = 'flex';
+        document.getElementById('ticket-cash').innerText = `$${Number(order.cashGiven).toFixed(2)}`;
+        document.getElementById('ticket-change').innerText = `$${Number(order.change).toFixed(2)}`;
+      } else {
+        cashRow.style.display = 'none';
+        changeRow.style.display = 'none';
+      }
+
+      document.getElementById('thermal-ticket-modal').classList.remove('hidden');
+    }
+
+    function closeTicketModal() {
+      document.getElementById('thermal-ticket-modal').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
